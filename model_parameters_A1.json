@@ -1,0 +1,17 @@
+{
+  "setup":{
+    
+    "startYr":2016,
+    "endYr":2023
+  },
+
+  "SCC":{
+    
+    "workDir":"/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/",
+    "logDir":"/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/modelLogs/",
+    "dataDir":"/projectnb/modislc/users/seamorez/HLS_FCover/input/",
+    "pyScript":"/projectnb/modislc/users/seamorez/HLS_FCover/scripts/run_models_A1.py",
+    
+    "numCores":8
+  }
+}
