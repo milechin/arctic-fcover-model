@@ -275,8 +275,9 @@ for subdir in subdirs:
     print(subdir)
     # For each year
     for year in years:
-        file = outdir+subdir+'/phenoMetrics/MSLSP_'+subdir+'_'+str(year)+'_'+metric+'.tif'
-        if (os.path.isfile(file)):
-            os.remove(file)
+        for metric in phenometrics:
+            file = outdir+subdir+'/phenoMetrics/MSLSP_'+subdir+'_'+str(year)+'_'+metric+'.tif'
+            if (os.path.isfile(file)):
+                os.remove(file)
     print('  Removed input tifs.')
 
