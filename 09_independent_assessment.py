@@ -29,6 +29,7 @@ start_yr = 2016
 end_yr = 2023
 phenometrics = ['50PCGI','Peak','50PCGD']
 metrics = ['dem', 'water', 'slope', 'aspect']
+do_s1 = True  # Bool for testing S1
 
 #### PARAMETERS ####
 years = np.arange(start_yr, end_yr+1, 1)
@@ -158,8 +159,8 @@ def make_plots(final_assess_pts, final_assess_pred):
 
     #compare_array = np.vstack([final_assess_pts[0], final_assess_pred[0]])
     #z = gaussian_kde(compare_array)(compare_array)
-    plt1=ax1.scatter(final_assess_pts[0], final_assess_pred[0], color='#0071dc', alpha=.7,s=20)
-    #plt1=ax1.hexbin(final_assess_pts[0], final_assess_pred[0], bins='log', gridsize=25, cmap='Blues')
+    #plt1=ax1.scatter(final_assess_pts[0], final_assess_pred[0], color='#0071dc', alpha=.7,s=20)
+    plt1=ax1.hexbin(final_assess_pts[0], final_assess_pred[0], bins='log', gridsize=25, cmap='Blues')
     ax1.plot([0,100],[0,100], color='black', linewidth=.5)
     sb.regplot(y=final_assess_pred[0],x=final_assess_pts[0], scatter=False, color='dodgerblue', scatter_kws={'alpha':0.2}, ax=ax1)
     ax1.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[0], final_assess_pred[0])[0,1]**2,2)), fontsize=20,color='black')
@@ -171,12 +172,12 @@ def make_plots(final_assess_pts, final_assess_pred):
     ax1.set_title('Water fractional cover', fontsize=32)
     ax1.set_xlabel('Observed', fontsize=24); ax1.set_ylabel('Predicted', fontsize=24)
     ax1.set_facecolor('white')
-    #plt.colorbar(plt1, ax=ax1)
+    plt.colorbar(plt1, ax=ax1)
 
     compare_array = np.vstack([final_assess_pts[1], final_assess_pred[1]])
     #z = gaussian_kde(compare_array)(compare_array)
-    plt2=ax2.scatter(final_assess_pts[1], final_assess_pred[1], color='#616161', alpha=.7,s=20)
-    #plt2=ax2.hexbin(final_assess_pts[1], final_assess_pred[1], bins='log', gridsize=25, cmap='Greys')
+    #plt2=ax2.scatter(final_assess_pts[1], final_assess_pred[1], color='#616161', alpha=.7,s=20)
+    plt2=ax2.hexbin(final_assess_pts[1], final_assess_pred[1], bins='log', gridsize=25, cmap='Greys')
     ax2.plot([0,100],[0,100], color='black', linewidth=.5)
     sb.regplot(y=final_assess_pred[1],x=final_assess_pts[1], scatter=False, color='grey', scatter_kws={'alpha':0.2}, ax=ax2)
     ax2.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[1],final_assess_pred[1])[0,1]**2,2)), fontsize=20,color='black')
@@ -188,12 +189,12 @@ def make_plots(final_assess_pts, final_assess_pred):
     ax2.set_title('Barren fractional cover', fontsize=32)
     ax2.set_xlabel('Observed', fontsize=24); ax2.set_ylabel('Predicted', fontsize=24)
     ax2.set_facecolor('white')
-    #plt.colorbar(plt2, ax=ax2)
+    plt.colorbar(plt2, ax=ax2)
 
     compare_array = np.vstack([final_assess_pts[2], final_assess_pred[2]])
     #z = gaussian_kde(compare_array)(compare_array)
-    plt3=ax3.scatter(final_assess_pts[2], final_assess_pred[2], color='orange', alpha=.7,s=20)
-    #plt3=ax3.hexbin(final_assess_pts[2], final_assess_pred[2], bins='log', gridsize=25, cmap='YlOrBr')
+    #plt3=ax3.scatter(final_assess_pts[2], final_assess_pred[2], color='orange', alpha=.7,s=20)
+    plt3=ax3.hexbin(final_assess_pts[2], final_assess_pred[2], bins='log', gridsize=25, cmap='YlOrBr')
     ax3.plot([0,100],[0,100], color='black', linewidth=.5)
     sb.regplot(y=final_assess_pred[2],x=final_assess_pts[2], scatter=False, color='orange', scatter_kws={'alpha':0.2}, ax=ax3)
     ax3.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[2],final_assess_pred[2])[0,1]**2,2)), fontsize=20,color='black')
@@ -205,12 +206,12 @@ def make_plots(final_assess_pts, final_assess_pred):
     ax3.set_title('Non-woody fractional cover', fontsize=32)
     ax3.set_xlabel('Observed', fontsize=24); ax3.set_ylabel('Predicted', fontsize=24)
     ax3.set_facecolor('white')
-    #plt.colorbar(plt3, ax=ax3)
+    plt.colorbar(plt3, ax=ax3)
 
     compare_array = np.vstack([final_assess_pts[3], final_assess_pred[3]])
     #z = gaussian_kde(compare_array)(compare_array)
-    plt4=ax4.scatter(final_assess_pts[3], final_assess_pred[3], color='#4d8f00', alpha=.7,s=20)
-    #plt4=ax4.hexbin(final_assess_pts[3], final_assess_pred[3], bins='log', gridsize=25, cmap='YlGn')
+    #plt4=ax4.scatter(final_assess_pts[3], final_assess_pred[3], color='#4d8f00', alpha=.7,s=20)
+    plt4=ax4.hexbin(final_assess_pts[3], final_assess_pred[3], bins='log', gridsize=25, cmap='YlGn')
     ax4.plot([0,100],[0,100], color='black', linewidth=.5)
     sb.regplot(y=final_assess_pred[3],x=final_assess_pts[3], scatter=False, color='#4d8f00', scatter_kws={'alpha':0.2}, ax=ax4)
     ax4.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[3],final_assess_pred[3])[0,1]**2,2)), fontsize=20,color='black')
@@ -222,12 +223,12 @@ def make_plots(final_assess_pts, final_assess_pred):
     ax4.set_title('Shrub fractional cover', fontsize=32)
     ax4.set_xlabel('Observed', fontsize=24); ax4.set_ylabel('Predicted', fontsize=24)
     ax4.set_facecolor('white')
-    #plt.colorbar(plt4, ax=ax4)
+    plt.colorbar(plt4, ax=ax4)
 
     compare_array = np.vstack([final_assess_pts[4], final_assess_pred[4]])
     #z = gaussian_kde(compare_array)(compare_array)
-    plt5=ax5.scatter(final_assess_pts[4], final_assess_pred[4], color='#173114', alpha=.7,s=20)
-    #plt5=ax5.hexbin(final_assess_pts[4], final_assess_pred[4], bins='log', gridsize=25, cmap='PuBuGn')
+    #plt5=ax5.scatter(final_assess_pts[4], final_assess_pred[4], color='#173114', alpha=.7,s=20)
+    plt5=ax5.hexbin(final_assess_pts[4], final_assess_pred[4], bins='log', gridsize=25, cmap='PuBuGn')
     ax5.plot([0,100],[0,100], color='black', linewidth=.5)
     sb.regplot(y=final_assess_pred[4],x=final_assess_pts[4], scatter=False, color='darkgreen', scatter_kws={'alpha':0.2}, ax=ax5)
     ax5.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[4],final_assess_pred[4])[0,1]**2,2)), fontsize=20,color='black')
@@ -239,7 +240,7 @@ def make_plots(final_assess_pts, final_assess_pred):
     ax5.set_title('Trees fractional cover', fontsize=32)
     ax5.set_xlabel('Observed', fontsize=24); ax5.set_ylabel('Predicted', fontsize=24)
     ax5.set_facecolor('white')
-    #plt.colorbar(plt5, ax=ax5)
+    plt.colorbar(plt5, ax=ax5)
     
     plt.show()
     
@@ -314,7 +315,7 @@ def make_hists(final_assess_pts, final_assess_pred):
 
 
 #%%
-# Read in rasters one by one
+# WARNING: DO NOT RE-RUN IF ALREADY MADE. THIS TAKES A WHILE. Read in rasters one by one
 map_list = pd.read_csv(model_assessdir+'map_paths.csv')
 for i, row in map_list[26:].iterrows():
     print(row['map'])
@@ -334,6 +335,55 @@ for i, row in map_list[26:].iterrows():
 #%%
 # Collect assessment points
 map_list = pd.read_csv(model_assessdir+'map_paths.csv')
+
+# If comparing S1, select only assessment maps where we have S1 data & results
+if do_s1==True:
+    map_list = map_list.loc[map_list['S1']==1]
+    map_list.reset_index(inplace=True)
+    
+    # For results with S1
+    for i, row in map_list.iterrows():
+        print(row['map'])
+        
+        # Map with models over the reference map
+        # Read the 30 m map
+        if not os.path.exists(model_assessdir+row['map']+'_30m_assess.tif'):
+            print('File '+model_assessdir+row['map']+'_30m_assess.tif'+' has not been created yet!')
+            continue
+        
+        with rio.open(model_assessdir+row['map']+'_30m_assess.tif') as src:  
+            ref_map = src.read()
+            
+            # Read the modeled fcover map and clip to map
+            with rio.open(model_outdir+str(row['year'])+'/FCover_'+row['hls_tile']+'_'+str(row['year'])+'_rfr_s1.tif') as pred_src:   
+                pred_map = pred_src.read()
+        
+        # Filter to where both maps have data
+        pred_map[ref_map==32767] = 32767; ref_map[pred_map==32767] = 32767
+            
+        nclasses, nx, ny = ref_map.shape
+        ref_map = ref_map.reshape(5, nx*ny); pred_map = pred_map.reshape(5, nx*ny)
+        ref_map = ref_map[:,ref_map[0]!=32767]; pred_map = pred_map[:,pred_map[0]!=32767]
+        print(ref_map.shape)
+        ref_map = np.round(ref_map*100)
+        
+        # Combine water and barren classes if not separated in reference map
+        if row['unique_water']==0:
+            pred_map[1] = pred_map[0] + pred_map[1]
+            pred_map[0] = 0
+        
+        if ref_map.size==0: 
+            print('Empty!')
+            continue
+        if i==0: # CHANGE TO 0 WHEN ALL MAPS ARE READY
+            s1_assess_pts = [ref_map]
+            s1_assess_pred = [pred_map]
+            #all_used_pixels = [all_pixels]
+        else:
+            s1_assess_pts.append(ref_map)
+            s1_assess_pred.append(pred_map)
+    
+# For results without S1    
 for i, row in map_list.iterrows():
     print(row['map'])
     
@@ -377,6 +427,74 @@ for i, row in map_list.iterrows():
         
 
 #%%
+# Assess for S1
+
+if do_s1==True:
+    # Orndahl maps
+    orndahl_obs = np.hstack((s1_assess_pts[0], s1_assess_pts[1], s1_assess_pts[2], s1_assess_pts[3], 
+                             s1_assess_pts[4], s1_assess_pts[5], s1_assess_pts[6], s1_assess_pts[7],
+                             s1_assess_pts[8], s1_assess_pts[9], s1_assess_pts[10]))
+    orndahl_pred = np.hstack((s1_assess_pred[0], s1_assess_pred[1], s1_assess_pred[2], s1_assess_pred[3], 
+                             s1_assess_pred[4], s1_assess_pred[5], s1_assess_pred[6], s1_assess_pred[7],
+                             s1_assess_pred[8], s1_assess_pred[9], s1_assess_pred[10]))
+    make_plots(orndahl_obs, orndahl_pred)
+    #make_hists(orndahl_obs, orndahl_pred)
+    
+    # Greaves maps
+    greaves_obs = np.hstack((s1_assess_pts[11], s1_assess_pts[12], s1_assess_pts[13]))
+    greaves_pred = np.hstack((s1_assess_pred[11], s1_assess_pred[12], s1_assess_pred[13]))
+    col_indices = np.random.choice(greaves_obs.shape[1], 1500, replace=False)
+    make_plots(greaves_obs[:, col_indices], greaves_pred[:, col_indices])
+    # make_plots(greaves_obs, greaves_pred)
+    #make_hists(greaves_obs, greaves_pred)
+    
+    # Yang maps
+    yang_obs = np.hstack((s1_assess_pts[14], s1_assess_pts[15], s1_assess_pts[16], s1_assess_pts[17], 
+                             s1_assess_pts[18], s1_assess_pts[19], s1_assess_pts[20], s1_assess_pts[21],
+                             s1_assess_pts[22], s1_assess_pts[23], s1_assess_pts[24], s1_assess_pts[25],
+                             s1_assess_pts[26], s1_assess_pts[27]))
+    yang_pred = np.hstack((s1_assess_pred[14], s1_assess_pred[15], s1_assess_pred[16], s1_assess_pred[17], 
+                             s1_assess_pred[18], s1_assess_pred[19], s1_assess_pred[20], s1_assess_pred[21],
+                             s1_assess_pred[22], s1_assess_pred[23], s1_assess_pred[24], s1_assess_pred[25],
+                             s1_assess_pred[26], s1_assess_pred[27]))
+    col_indices = np.random.choice(yang_obs.shape[1], 1500, replace=False)
+    make_plots(yang_obs[:, col_indices], yang_pred[:, col_indices])
+    #make_hists(yang_obs, yang_pred)
+    
+    # Now, without S1
+    # Orndahl maps
+    orndahl_obs = np.hstack((all_assess_pts[0], all_assess_pts[1], all_assess_pts[2], all_assess_pts[3], 
+                             all_assess_pts[4], all_assess_pts[5], all_assess_pts[6], all_assess_pts[7],
+                             all_assess_pts[8], all_assess_pts[9], all_assess_pts[10]))
+    orndahl_pred = np.hstack((all_assess_pred[0], all_assess_pred[1], all_assess_pred[2], all_assess_pred[3], 
+                             all_assess_pred[4], all_assess_pred[5], all_assess_pred[6], all_assess_pred[7],
+                             all_assess_pred[8], all_assess_pred[9], all_assess_pred[10]))
+    make_plots(orndahl_obs, orndahl_pred)
+    #make_hists(orndahl_obs, orndahl_pred)
+    
+    # Greaves maps
+    greaves_obs = np.hstack((all_assess_pts[11], all_assess_pts[12], all_assess_pts[13]))
+    greaves_pred = np.hstack((all_assess_pred[11], all_assess_pred[12], all_assess_pred[13]))
+    col_indices = np.random.choice(greaves_obs.shape[1], 1500, replace=False)
+    make_plots(greaves_obs[:, col_indices], greaves_pred[:, col_indices])
+    # make_plots(greaves_obs, greaves_pred)
+    #make_hists(greaves_obs, greaves_pred)
+    
+    # Yang maps
+    yang_obs = np.hstack((all_assess_pts[14], all_assess_pts[15], all_assess_pts[16], all_assess_pts[17], 
+                             all_assess_pts[18], all_assess_pts[19], all_assess_pts[20], all_assess_pts[21],
+                             all_assess_pts[22], all_assess_pts[23], all_assess_pts[24], all_assess_pts[25],
+                             all_assess_pts[26], all_assess_pts[27]))
+    yang_pred = np.hstack((all_assess_pred[14], all_assess_pred[15], all_assess_pred[16], all_assess_pred[17], 
+                             all_assess_pred[18], all_assess_pred[19], all_assess_pred[20], all_assess_pred[21],
+                             all_assess_pred[22], all_assess_pred[23], all_assess_pred[24], all_assess_pred[25],
+                             all_assess_pred[26], all_assess_pred[27]))
+    col_indices = np.random.choice(yang_obs.shape[1], 1500, replace=False)
+    make_plots(yang_obs[:, col_indices], yang_pred[:, col_indices])
+    #make_hists(yang_obs, yang_pred)
+    
+
+#%%
 # Assess
 # Fraser map
 fraser_obs = all_assess_pts[0]
@@ -401,3 +519,7 @@ greaves_pred = np.hstack((all_assess_pred[12], all_assess_pred[13], all_assess_p
 # make_plots(greaves_obs[:, col_indices], greaves_pred[:, col_indices])
 # make_plots(greaves_obs, greaves_pred)
 make_hists(greaves_obs, greaves_pred)
+
+# Grunberg maps
+
+# Yang maps

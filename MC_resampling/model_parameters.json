@@ -1,0 +1,20 @@
+{
+  "setup":{
+    
+    "startYr":2016,
+    "endYr":2023,
+    "numModels":20,
+    "s1":"False"
+  },
+
+  "SCC":{
+    
+    "workDir":"/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/MC_outputs/",
+    "logDir":"/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/modelLogs/MC/",
+    "dataDir":"/projectnb/modislc/users/seamorez/HLS_FCover/input/",
+    "modelScript":"/projectnb/modislc/users/seamorez/HLS_FCover/scripts/mc_train_models.py",
+    "pyScript":"/projectnb/modislc/users/seamorez/HLS_FCover/scripts/mc_run_models.py",
+    
+    "numCores":8
+  }
+}

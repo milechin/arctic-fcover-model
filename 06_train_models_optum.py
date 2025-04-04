@@ -1,3 +1,4 @@
+import sys
 import glob
 import numpy as np
 import pandas as pd
@@ -7,15 +8,19 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import GridSearchCV
 from scipy.stats import gaussian_kde
+from skopt import BayesSearchCV
+from skopt.space import Real, Integer, Categorical
 import pickle
 import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 import seaborn as sb
 
-## THIS SCRIPT IS FOR RUNNING A MODEL WITH THE SAME REGRESSIAN AND BIAS MODEL TRAINING PTS 
-## FROM THE S1 MODELS BUT WITHOUT S1 FEATURES
-## RUN THIS AFTER RUNNING 06_train_models.py WITH do_s1 = True
+idx = ''
+#%%
+# Only run from command line!
+idx = sys.argv[1]  # ID of the model
+idx = '_'+str(idx)
 
 #%%
 #### PARAMETERS TO BE PASSED IN ####
@@ -28,6 +33,7 @@ start_yr = 2016
 end_yr = 2023
 phenometrics = ['50PCGI','Peak','50PCGD']
 metrics = ['dem', 'water', 'slope', 'aspect']
+do_s1 = False  # Bool for testing S1
 
 #### PARAMETERS ####
 years = np.arange(start_yr, end_yr+1, 1)
@@ -124,9 +130,7 @@ def sample_training(map_path, premask_path, nclasses, feats_path, n):
         
     return train_pts, feats_pts, train_pixels
 
-def sample_bias(map_path, premask_path, classified_map, train_pixels_path, nclasses, n):
-    train_pixels = np.loadtxt(train_pixels_path, dtype='int16', delimiter=',')
-    
+def sample_bias(map_path, premask_path, classified_map, train_pixels, nclasses, n):
     # Read the unmasked map
     with rio.open(premask_path) as rawsrc:
         premask_map = rawsrc.read()
@@ -142,8 +146,6 @@ def sample_bias(map_path, premask_path, classified_map, train_pixels_path, nclas
         strat_band = premask_map[3,:,:]
     total_nobs = strat_band[strat_band!=32767].size  # number of pixels total
     plt.hist(strat_band[strat_band!=32767]); plt.show()
-    
-    assess_pixels = np.zeros_like(train_pixels, dtype='int16')
     
     # Find all indices of bins with 20% cover range
     for lower_bound in np.linspace(0,0.8,5):
@@ -196,58 +198,15 @@ def sample_bias(map_path, premask_path, classified_map, train_pixels_path, nclas
         print(bias_pts.shape, bias_predicted.shape)
         
         # Update train_pixels
-        assess_pixels[x_inds[selected], y_inds[selected]] = 1
+        train_pixels[x_inds[selected], y_inds[selected]] = 1
         
-    print('Total n assessment pixels:',assess_pixels[assess_pixels==1].size)
+    print('Total n bias correction pixels:',train_pixels[train_pixels==1].size)
     # if nclasses==4: 
     #     new_row = np.zeros((1, bias_pts.shape[1]))
     #     bias_pts = np.vstack([bias_pts, new_row])
     #     print('Classes:',bias_pts.shape[0])
         
-    return bias_pts, bias_predicted, assess_pixels
-
-def get_training(train_ids_path, map_path, feats_path):
-    # Read the training sample mask
-    train_px = np.loadtxt(train_ids_path, dtype='int16', delimiter=',')
-    print(train_px.shape)
-    
-    # Read the 30 m map
-    with rio.open(map_path) as src:
-        train_map = src.read()
-        
-        # Read the feats and clip to map
-        with rio.open(feats_path) as featsrc:   
-            window = rio.windows.from_bounds(*src.bounds, transform=featsrc.transform)
-            full_stack_clipped = featsrc.read(window=window, boundless=True)
-    
-    training_pts = train_map[:, train_px==1]
-    features = full_stack_clipped[:, train_px==1]
-    
-    return training_pts, features, train_px
-
-def get_bias(all_train_ids_path, training_pixels, map_path, classified_map):
-    # Read the bias sample mask
-    bias_px = np.loadtxt(all_train_ids_path, dtype='int16', delimiter=',')
-    bias_px[training_pixels==1] = 0
-    
-    # Read the 30 m map
-    with rio.open(map_path) as src:
-        train_map = src.read()
-        
-    bias_pts = train_map[:, bias_px==1]
-    bias_predicted = classified_map[:, bias_px==1]
-    
-    return bias_pts, bias_predicted
-
-def get_assess(map_path, classified_map, assess_pixels):
-    # Read the 30 m map
-    with rio.open(map_path) as src:
-        train_map = src.read()
-        
-    obs_map = train_map[:, assess_pixels==1]
-    pred_map = classified_map[:, assess_pixels==1]
-    
-    return obs_map, pred_map
+    return bias_pts, bias_predicted, train_pixels
 
 
 #%%
@@ -256,9 +215,18 @@ def get_assess(map_path, classified_map, assess_pixels):
 # Get training sample
 for i, row in train_key.iterrows():
     print(row['train_img_name'])
-    train_pts, feat_pts, train_pixels = get_training(model_traindir+row['train_img_name'][:-4]+'_ids_prebias.txt',
-                                                     traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'],
-                                                     outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_'+str(row['year'])+'.tif')
+    if do_s1==True:
+        train_pts, feat_pts, train_pixels = sample_training(traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'],
+                                                            traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'][:-10]+'.tif',
+                                                            row['nclasses'],
+                                                            outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_s1_'+str(row['year'])+'.tif',
+                                                            row['nsamples'])
+    else:
+        train_pts, feat_pts, train_pixels = sample_training(traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'],
+                                                            traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'][:-10]+'.tif',
+                                                            row['nclasses'],
+                                                            outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_'+str(row['year'])+'.tif',
+                                                            row['nsamples'])
     
     if i==0:
         all_train_pts = train_pts
@@ -275,18 +243,191 @@ for i, row in train_key.iterrows():
     final_feat_pts = np.delete(temp_feat_pts, np.where((temp_feat_pts==32767).any(axis=0))[0], axis=1)
 
 #%%    
-# Train models
-water_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[0])
-barren_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[1])
-herb_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[2])
-shrub_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[3])
-trees_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[4])
+# UNCOMMENT NEXT 2 LINES ONLY TO REMOVE S1 TO COMPARE WITH S1 MODEL
+#do_s1==False
+#final_feat_pts = final_feat_pts[:-4,:,:]
 
+# Bayesian Optum
+# Define search space
+search_space = {
+    'n_estimators': Integer(200, 2000),
+    #'max_depth': Integer(5, 500),
+    'min_samples_split': Integer(2, 20),
+    'max_features': Categorical(['sqrt', 'log2', 1/3, 1])
+}
+
+# Train models
+water_regressor = RandomForestRegressor(random_state=7)
+barren_regressor = RandomForestRegressor(random_state=7)
+herb_regressor = RandomForestRegressor(random_state=7)
+shrub_regressor = RandomForestRegressor(random_state=7)
+trees_regressor = RandomForestRegressor(random_state=7)
+print('Ready for optimization!')
+
+# Run Bayesian search
+water_opt = BayesSearchCV(
+    water_regressor,
+    search_spaces=search_space,
+    n_iter=100,        # number of trials
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+    random_state=7
+)
+barren_opt = BayesSearchCV(
+    barren_regressor,
+    search_spaces=search_space,
+    n_iter=100,        # number of trials
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+    random_state=7
+)
+herb_opt = BayesSearchCV(
+    herb_regressor,
+    search_spaces=search_space,
+    n_iter=100,        # number of trials
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+    random_state=7
+)
+shrub_opt = BayesSearchCV(
+    shrub_regressor,
+    search_spaces=search_space,
+    n_iter=100,        # number of trials
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+    random_state=7
+)
+trees_opt = BayesSearchCV(
+    trees_regressor,
+    search_spaces=search_space,
+    n_iter=100,        # number of trials
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+    random_state=7
+)
+
+water_opt.fit(final_feat_pts.T, final_train_pts[0])
+print('Water model:')
+print("Best params:", water_opt.best_params_)
+print("Best score:", water_opt.best_score_)
+barren_opt.fit(final_feat_pts.T, final_train_pts[1])
+print('Barren model:')
+print("Best params:", barren_opt.best_params_)
+print("Best score:", barren_opt.best_score_)
+herb_opt.fit(final_feat_pts.T, final_train_pts[2])
+print('Herb model:')
+print("Best params:", herb_opt.best_params_)
+print("Best score:", herb_opt.best_score_)
+shrub_opt.fit(final_feat_pts.T, final_train_pts[3])
+print('Shrub model:')
+print("Best params:", shrub_opt.best_params_)
+print("Best score:", shrub_opt.best_score_)
+trees_opt.fit(final_feat_pts.T, final_train_pts[4])
+print('Trees model:')
+print("Best params:", trees_opt.best_params_)
+print("Best score:", trees_opt.best_score_)
+
+#%%
+# Grid Search Optum
+# Define search space
+param_grid = {
+    'n_estimators': [200, 500, 1000, 2000],
+    #'max_depth': [None, 10, 20],
+    'min_samples_split': [2, 5, 15, 20],
+    'max_features': ['sqrt', 'log2', 1/3, 1]
+}
+search_space = {
+    'n_estimators': Integer(200, 2000),
+    #'max_depth': Integer(5, 500),
+    'min_samples_split': Integer(2, 20),
+    'max_features': Categorical(['sqrt', 'log2', 1/3])
+}
+
+# Train models
+water_regressor = RandomForestRegressor(random_state=7)
+barren_regressor = RandomForestRegressor(random_state=7)
+herb_regressor = RandomForestRegressor(random_state=7)
+shrub_regressor = RandomForestRegressor(random_state=7)
+trees_regressor = RandomForestRegressor(random_state=7)
+print('Ready for optimization!')
+
+# Run Bayesian search
+water_opt = GridSearchCV(
+    water_regressor,
+    param_grid=param_grid,
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+)
+barren_opt = GridSearchCV(
+    barren_regressor,
+    param_grid=param_grid,
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+)
+herb_opt = GridSearchCV(
+    herb_regressor,
+    param_grid=param_grid,
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+)
+shrub_opt = GridSearchCV(
+    shrub_regressor,
+    param_grid=param_grid,
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+)
+trees_opt = GridSearchCV(
+    trees_regressor,
+    param_grid=param_grid,
+    cv=5,
+    scoring='neg_mean_squared_error',
+    n_jobs=7,
+)
+
+water_opt.fit(final_feat_pts.T, final_train_pts[0])
+print('Water model:')
+print("Best params:", water_opt.best_params_)
+print("Best score:", water_opt.best_score_)
+barren_opt.fit(final_feat_pts.T, final_train_pts[1])
+print('Barren model:')
+print("Best params:", barren_opt.best_params_)
+print("Best score:", barren_opt.best_score_)
+herb_opt.fit(final_feat_pts.T, final_train_pts[2])
+print('Herb model:')
+print("Best params:", herb_opt.best_params_)
+print("Best score:", herb_opt.best_score_)
+shrub_opt.fit(final_feat_pts.T, final_train_pts[3])
+print('Shrub model:')
+print("Best params:", shrub_opt.best_params_)
+print("Best score:", shrub_opt.best_score_)
+trees_opt.fit(final_feat_pts.T, final_train_pts[4])
+print('Trees model:')
+print("Best params:", trees_opt.best_params_)
+print("Best score:", trees_opt.best_score_)
+
+
+#%%
 # Variable importances
 band_names = np.array(['50PCGI B','50PCGI G','50PCGI R','50PCGI NIR','50PCGI SWIR1','50PCGI SWIR2','50PCGI EVI2','50PCGI TCG','50PCGI TCW','50PCGI TCB',
                        'Peak B','Peak G','Peak R','Peak NIR','Peak SWIR1','Peak SWIR2','Peak EVI2','Peak TCG','Peak TCW','Peak TCB',
                        '50PCGD B','50PCGD G','50PCGD R','50PCGD NIR','50PCGD SWIR1','50PCGD SWIR2','50PCGD EVI2','50PCGD TCG','50PCGD TCW','50PCGD TCB',
                        'Elevation','Slope','Aspect'])
+
+if do_s1==True:
+    band_names = np.array(['50PCGI B','50PCGI G','50PCGI R','50PCGI NIR','50PCGI SWIR1','50PCGI SWIR2','50PCGI EVI2','50PCGI TCG','50PCGI TCW','50PCGI TCB',
+                           'Peak B','Peak G','Peak R','Peak NIR','Peak SWIR1','Peak SWIR2','Peak EVI2','Peak TCG','Peak TCW','Peak TCB',
+                           '50PCGD B','50PCGD G','50PCGD R','50PCGD NIR','50PCGD SWIR1','50PCGD SWIR2','50PCGD EVI2','50PCGD TCG','50PCGD TCW','50PCGD TCB',
+                           'Elevation','Slope','Aspect', 
+                           'VV_Summer','VH_Summer','VV_Winter','VH_Winter'])
 
 # w_band_names = np.array(['50PCGI NIR','50PCGI SWIR1','50PCGI SWIR2','50PCGI TCG','50PCGI TCW',
 #                        'Peak_NIR','Peak SWIR1','Peak SWIR2','Peak TCG','Peak TCW',
@@ -299,11 +440,19 @@ herb_variable_importance.sort_values(by=['Importance'], ascending=True, inplace=
 plt.barh(herb_variable_importance['Band'][-10:],herb_variable_importance['Importance'][-10:], color='#7bab00')
 plt.show()
 
-water_path = model_traindir+"water_rfr.pickle"
-barren_path = model_traindir+"barren_rfr.pickle"
-herb_path = model_traindir+"herb_rfr.pickle"
-shrub_path = model_traindir+"shrub_rfr.pickle"
-trees_path = model_traindir+"trees_rfr.pickle"
+# Save models
+if do_s1==True:
+    water_path = model_traindir+"water_rfr_s1"+idx+".pickle"
+    barren_path = model_traindir+"barren_rfr_s1"+idx+".pickle"
+    herb_path = model_traindir+"herb_rfr_s1"+idx+".pickle"
+    shrub_path = model_traindir+"shrub_rfr_s1"+idx+".pickle"
+    trees_path = model_traindir+"trees_rfr_s1"+idx+".pickle"
+else:
+    water_path = model_traindir+"water_rfr"+idx+".pickle"
+    barren_path = model_traindir+"barren_rfr"+idx+".pickle"
+    herb_path = model_traindir+"herb_rfr"+idx+".pickle"
+    shrub_path = model_traindir+"shrub_rfr"+idx+".pickle"
+    trees_path = model_traindir+"trees_rfr"+idx+".pickle"
     
 pickle.dump(water_regressor, open(water_path, "wb"))
 pickle.dump(barren_regressor, open(barren_path, "wb"))
@@ -312,8 +461,8 @@ pickle.dump(shrub_regressor, open(shrub_path, "wb"))
 pickle.dump(trees_regressor, open(trees_path, "wb"))
 
 # Save sampled training pixels
-# for i, row in train_key.iterrows():
-#     np.savetxt(model_traindir+row['train_img_name'][:-4]+'_ids_prebias.txt', all_train_pixels[i], delimiter=',')
+for i, row in train_key.iterrows():
+    np.savetxt(model_traindir+row['train_img_name'][:-4]+'_ids_prebias'+idx+'.txt', all_train_pixels[i], delimiter=',')
 
 
 #%%
@@ -323,10 +472,16 @@ for i, row in train_key.iterrows():
     # Read the 30 m map
     with rio.open(traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name']) as src:        
         # Read the feats and clip to map
-        with rio.open(outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_'+str(row['year'])+'.tif') as featsrc:   
-            window = rio.windows.from_bounds(*src.bounds, transform=featsrc.transform)
-            full_stack_img = featsrc.read(window=window, boundless=True)
-            full_stack_img = full_stack_img.astype('float32'); full_stack_img[full_stack_img==32767] = np.nan
+        if do_s1==True:
+            with rio.open(outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_s1_'+str(row['year'])+'.tif') as featsrc:   
+                window = rio.windows.from_bounds(*src.bounds, transform=featsrc.transform)
+                full_stack_img = featsrc.read(window=window, boundless=True)
+                full_stack_img = full_stack_img.astype('float32'); full_stack_img[full_stack_img==32767] = np.nan
+        else:
+            with rio.open(outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_'+str(row['year'])+'.tif') as featsrc:   
+                window = rio.windows.from_bounds(*src.bounds, transform=featsrc.transform)
+                full_stack_img = featsrc.read(window=window, boundless=True)
+                full_stack_img = full_stack_img.astype('float32'); full_stack_img[full_stack_img==32767] = np.nan
 
     #meta = full_stack.meta
     nsamples, nx, ny = full_stack_img.shape 
@@ -381,19 +536,21 @@ for i, row in train_key.iterrows():
 
     # Get bias correction sample
     print(row['train_img_name'])
-    bias_pts, bias_pred = get_bias(model_traindir+row['train_img_name'][:-4]+'_ids.txt',
-                                   all_train_pixels[i],
-                                   traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'],
-                                   all_predict)
+    bias_pts, bias_pred, bias_pixels = sample_bias(traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'],
+                                                    traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'][:-10]+'.tif',
+                                                    all_predict,
+                                                    all_train_pixels[i],
+                                                    row['nclasses'],
+                                                    row['nsamples'])
     
     if i==0:
         all_bias_pts = bias_pts
         all_bias_pred = bias_pred
-        # all_train_bias_pixels = [bias_pixels]
+        all_train_bias_pixels = [bias_pixels]
     else:
         all_bias_pts = np.hstack((all_bias_pts, bias_pts))
         all_bias_pred = np.hstack((all_bias_pred, bias_pred))
-        # all_train_bias_pixels.append(bias_pixels)
+        all_train_bias_pixels.append(bias_pixels)
     
     temp_bias_pts = np.delete(all_bias_pts, np.where((all_bias_pts==32767).any(axis=0))[0], axis=1)
     temp_bias_pred = np.delete(all_bias_pred, np.where((all_bias_pts==32767).any(axis=0))[0], axis=1)
@@ -489,15 +646,22 @@ ax5.set_ylim(0,1)
 plt.colorbar(plt5, ax=ax5)
 
 # Save bias correction models
-pickle.dump(reg0, open(model_traindir+'water_bias.pickle', "wb"))
-pickle.dump(reg1, open(model_traindir+'barren_bias.pickle', "wb"))
-pickle.dump(reg2, open(model_traindir+'herb_bias.pickle', "wb"))
-pickle.dump(reg3, open(model_traindir+'shrub_bias.pickle', "wb"))
-pickle.dump(reg4, open(model_traindir+'trees_bias.pickle', "wb"))
+if do_s1==True:
+    pickle.dump(reg0, open(model_traindir+'water_bias_s1'+idx+'.pickle', "wb"))
+    pickle.dump(reg1, open(model_traindir+'barren_bias_s1'+idx+'.pickle', "wb"))
+    pickle.dump(reg2, open(model_traindir+'herb_bias_s1'+idx+'.pickle', "wb"))
+    pickle.dump(reg3, open(model_traindir+'shrub_bias_s1'+idx+'.pickle', "wb"))
+    pickle.dump(reg4, open(model_traindir+'trees_bias_s1'+idx+'.pickle', "wb"))
+else:
+    pickle.dump(reg0, open(model_traindir+'water_bias'+idx+'.pickle', "wb"))
+    pickle.dump(reg1, open(model_traindir+'barren_bias'+idx+'.pickle', "wb"))
+    pickle.dump(reg2, open(model_traindir+'herb_bias'+idx+'.pickle', "wb"))
+    pickle.dump(reg3, open(model_traindir+'shrub_bias'+idx+'pickle', "wb"))
+    pickle.dump(reg4, open(model_traindir+'trees_bias'+idx+'.pickle', "wb"))
 
 # Save sampled training pixels
-# for i, row in train_key.iterrows():
-#     np.savetxt(model_traindir+row['train_img_name'][:-4]+'_ids.txt', all_train_bias_pixels[i], delimiter=',')
+for i, row in train_key.iterrows():
+    np.savetxt(model_traindir+row['train_img_name'][:-4]+'_ids'+idx+'.txt', all_train_bias_pixels[i], delimiter=',')
 
 #%%
 # 3) Run models, bias correction, and post-processing on training images and assess 
@@ -507,10 +671,16 @@ for i, row in train_key.iterrows():
     # Read the 30 m map
     with rio.open(traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name']) as src:        
         # Read the feats and clip to map
-        with rio.open(outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_'+str(row['year'])+'.tif') as featsrc:   
-            window = rio.windows.from_bounds(*src.bounds, transform=featsrc.transform)
-            full_stack_img = featsrc.read(window=window, boundless=True)
-            full_stack_img = full_stack_img.astype('float32'); full_stack_img[full_stack_img==32767] = np.nan
+        if do_s1==True:
+            with rio.open(outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_s1_'+str(row['year'])+'.tif') as featsrc:   
+                window = rio.windows.from_bounds(*src.bounds, transform=featsrc.transform)
+                full_stack_img = featsrc.read(window=window, boundless=True)
+                full_stack_img = full_stack_img.astype('float32'); full_stack_img[full_stack_img==32767] = np.nan
+        else:
+            with rio.open(outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_'+str(row['year'])+'.tif') as featsrc:   
+                window = rio.windows.from_bounds(*src.bounds, transform=featsrc.transform)
+                full_stack_img = featsrc.read(window=window, boundless=True)
+                full_stack_img = full_stack_img.astype('float32'); full_stack_img[full_stack_img==32767] = np.nan
 
     #meta = full_stack.meta
     nsamples, nx, ny = full_stack_img.shape 
@@ -649,309 +819,21 @@ for i, row in train_key.iterrows():
     
     # Get assessment sample
     print(row['train_img_name'])
-    assess_pts, assess_pred, assess_pixels = sample_bias(traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'],
+    assess_pts, assess_pred, all_pixels = sample_bias(traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'],
                                                     traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'][:-10]+'.tif',
                                                     all_norm.reshape(5,nx,ny),
-                                                    model_traindir+row['train_img_name'][:-4]+'_ids.txt',
+                                                    all_train_bias_pixels[i],
                                                     row['nclasses'],
                                                     row['nsamples'])
     
     if i==0:
         all_assess_pts = assess_pts
         all_assess_pred = assess_pred
-        all_used_pixels = [assess_pixels]
+        all_used_pixels = [all_pixels]
     else:
         all_assess_pts = np.hstack((all_assess_pts, assess_pts))
         all_assess_pred = np.hstack((all_assess_pred, assess_pred))
-        all_used_pixels.append(assess_pixels)
-    
-    temp_assess_pts = np.delete(all_assess_pts, np.where((all_assess_pts==32767).any(axis=0))[0], axis=1)
-    temp_assess_pred = np.delete(all_assess_pred, np.where((all_assess_pts==32767).any(axis=0))[0], axis=1)
-    final_assess_pts = np.delete(temp_assess_pts, np.where((temp_assess_pred==32767).any(axis=0))[0], axis=1)
-    final_assess_pred = np.delete(temp_assess_pred, np.where((temp_assess_pred==32767).any(axis=0))[0], axis=1)
-
-# Scale
-final_assess_pts = final_assess_pts*100
-
-# Assessment Plots
-fig, ((ax1, ax2, ax5), (ax3, ax4, ax6)) = plt.subplots(2, 3)
-fig.set_size_inches(34, 18)
-#axes.set_facecolor('black')
-
-compare_array = np.vstack([final_assess_pts[0], final_assess_pred[0]])
-z = gaussian_kde(compare_array)(compare_array)
-#plt1=ax1.scatter(final_assess_pts[0], final_assess_pred[0], c=z, cmap='plasma', s=100)
-#plt1=ax1.hexbin(final_assess_pts[0], final_assess_pred[0], bins='log', gridsize=25, cmap='Blues')
-plt1=ax1.hexbin(final_assess_pts[0], final_assess_pred[0], norm=colors.PowerNorm(gamma=0.2), gridsize=25, cmap='Blues')
-ax1.plot([0,100],[0,100], color='black', linewidth=.5)
-sb.regplot(y=final_assess_pred[0],x=final_assess_pts[0], scatter=False, color='dodgerblue', scatter_kws={'alpha':0.2}, ax=ax1)
-ax1.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[0], final_assess_pred[0])[0,1]**2,2)), fontsize=20,color='black')
-ax1.text(5, 90, 'MAE = '+str(np.round(mean_absolute_error(final_assess_pts[0], final_assess_pred[0]),2))+'%', fontsize=20,color='black')
-ax1.text(5, 85, 'RMSE = '+str(np.round(np.sqrt(mean_squared_error(final_assess_pts[0], final_assess_pred[0])),2))+'%', fontsize=20,color='black')
-ax1.text(5, 80, 'Bias = '+str(np.round(-np.mean(final_assess_pts[0]-final_assess_pred[0]),2))+'%', fontsize=20,color='black')
-ax1.set_xlim(0,100)
-ax1.set_ylim(0,100)
-ax1.set_title('Water fractional cover', fontsize=32)
-ax1.set_xlabel('Observed', fontsize=24); ax1.set_ylabel('Predicted', fontsize=24)
-ax1.set_facecolor('white')
-plt.colorbar(plt1, ax=ax1)
-
-compare_array = np.vstack([final_assess_pts[1], final_assess_pred[1]])
-z = gaussian_kde(compare_array)(compare_array)
-#plt2=ax2.scatter(final_assess_pts[1], final_assess_pred[1], c=z, cmap='plasma', s=100)
-#plt2=ax2.hexbin(final_assess_pts[1], final_assess_pred[1], bins='log', gridsize=25, cmap='Greys')
-plt2=ax2.hexbin(final_assess_pts[1], final_assess_pred[1], norm=colors.PowerNorm(gamma=0.2), gridsize=25, cmap='Greys')
-ax2.plot([0,100],[0,100], color='black', linewidth=.5)
-sb.regplot(y=final_assess_pred[1],x=final_assess_pts[1], scatter=False, color='grey', scatter_kws={'alpha':0.2}, ax=ax2)
-ax2.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[1],final_assess_pred[1])[0,1]**2,2)), fontsize=20,color='black')
-ax2.text(5, 90, 'MAE = '+str(np.round(mean_absolute_error(final_assess_pts[1],final_assess_pred[1]),2))+'%', fontsize=20,color='black')
-ax2.text(5, 85, 'RMSE = '+str(np.round(np.sqrt(mean_squared_error(final_assess_pts[1],final_assess_pred[1])),2))+'%', fontsize=20,color='black')
-ax2.text(5, 80, 'Bias = '+str(np.round(-np.mean(final_assess_pts[1]-final_assess_pred[1]), 2))+'%', fontsize=20,color='black')
-ax2.set_xlim(0,100)
-ax2.set_ylim(0,100)
-ax2.set_title('Barren fractional cover', fontsize=32)
-ax2.set_xlabel('Observed', fontsize=24); ax2.set_ylabel('Predicted', fontsize=24)
-ax2.set_facecolor('white')
-plt.colorbar(plt2, ax=ax2)
-
-compare_array = np.vstack([final_assess_pts[2], final_assess_pred[2]])
-z = gaussian_kde(compare_array)(compare_array)
-#plt3=ax3.scatter(final_assess_pts[2], final_assess_pred[2], c=z, cmap='plasma', s=100)
-#plt3=ax3.hexbin(final_assess_pts[2], final_assess_pred[2], bins='log', gridsize=25, cmap='YlOrBr')
-plt3=ax3.hexbin(final_assess_pts[2], final_assess_pred[2], norm=colors.PowerNorm(gamma=0.2), gridsize=25, cmap='YlOrBr')
-ax3.plot([0,100],[0,100], color='black', linewidth=.5)
-sb.regplot(y=final_assess_pred[2],x=final_assess_pts[2], scatter=False, color='orange', scatter_kws={'alpha':0.2}, ax=ax3)
-ax3.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[2],final_assess_pred[2])[0,1]**2,2)), fontsize=20,color='black')
-ax3.text(5, 90, 'MAE = '+str(np.round(mean_absolute_error(final_assess_pts[2],final_assess_pred[2]),2))+'%', fontsize=20,color='black')
-ax3.text(5, 85, 'RMSE = '+str(np.round(np.sqrt(mean_squared_error(final_assess_pts[2],final_assess_pred[2])),2))+'%', fontsize=20,color='black')
-ax3.text(5, 80, 'Bias = '+str(np.round(-np.mean(final_assess_pts[2]-final_assess_pred[2]), 2))+'%', fontsize=20,color='black')
-ax3.set_xlim(0,100)
-ax3.set_ylim(0,100)
-ax3.set_title('Low vegetation fractional cover', fontsize=32)
-ax3.set_xlabel('Observed', fontsize=24); ax3.set_ylabel('Predicted', fontsize=24)
-ax3.set_facecolor('white')
-plt.colorbar(plt3, ax=ax3)
-
-compare_array = np.vstack([final_assess_pts[3], final_assess_pred[3]])
-z = gaussian_kde(compare_array)(compare_array)
-#plt4=ax4.scatter(final_assess_pts[3], final_assess_pred[3], c=z, cmap='plasma', s=100)
-#plt4=ax4.hexbin(final_assess_pts[3], final_assess_pred[3], bins='log', gridsize=25, cmap='YlGn')
-plt4=ax4.hexbin(final_assess_pts[3], final_assess_pred[3], norm=colors.PowerNorm(gamma=0.2), gridsize=25, cmap='YlGn')
-ax4.plot([0,100],[0,100], color='black', linewidth=.5)
-sb.regplot(y=final_assess_pred[3],x=final_assess_pts[3], scatter=False, color='green', scatter_kws={'alpha':0.2}, ax=ax4)
-ax4.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[3],final_assess_pred[3])[0,1]**2,2)), fontsize=20,color='black')
-ax4.text(5, 90, 'MAE = '+str(np.round(mean_absolute_error(final_assess_pts[3],final_assess_pred[3]),2))+'%', fontsize=20,color='black')
-ax4.text(5, 85, 'RMSE = '+str(np.round(np.sqrt(mean_squared_error(final_assess_pts[3],final_assess_pred[3])),2))+'%', fontsize=20,color='black')
-ax4.text(5, 80, 'Bias = '+str(np.round(-np.mean(final_assess_pts[3]-final_assess_pred[3]), 2))+'%', fontsize=20,color='black')
-ax4.set_xlim(0,100)
-ax4.set_ylim(0,100)
-ax4.set_title('Shrub fractional cover', fontsize=32)
-ax4.set_xlabel('Observed', fontsize=24); ax4.set_ylabel('Predicted', fontsize=24)
-ax4.set_facecolor('white')
-plt.colorbar(plt4, ax=ax4)
-
-compare_array = np.vstack([final_assess_pts[4], final_assess_pred[4]])
-z = gaussian_kde(compare_array)(compare_array)
-#plt5=ax5.scatter(final_assess_pts[4], final_assess_pred[4], c=z, cmap='plasma', s=50)
-#plt5=ax5.hexbin(final_assess_pts[4], final_assess_pred[4], bins='log', gridsize=25, cmap='PuBuGn')
-plt5=ax5.hexbin(final_assess_pts[4], final_assess_pred[4], norm=colors.PowerNorm(gamma=0.2), gridsize=25, cmap='PuBuGn')
-ax5.plot([0,100],[0,100], color='black', linewidth=.5)
-sb.regplot(y=final_assess_pred[4],x=final_assess_pts[4], scatter=False, color='darkgreen', scatter_kws={'alpha':0.2}, ax=ax5)
-ax5.text(5, 95, '$R^2$ = '+str(np.round(np.corrcoef(final_assess_pts[4],final_assess_pred[4])[0,1]**2,2)), fontsize=20,color='black')
-ax5.text(5, 90, 'MAE = '+str(np.round(mean_absolute_error(final_assess_pts[4],final_assess_pred[4]),2))+'%', fontsize=20,color='black')
-ax5.text(5, 85, 'RMSE = '+str(np.round(np.sqrt(mean_squared_error(final_assess_pts[4],final_assess_pred[4])),2))+'%', fontsize=20,color='black')
-ax5.text(5, 80, 'Bias = '+str(np.round(-np.mean(final_assess_pts[4]-final_assess_pred[4]), 2))+'%', fontsize=20,color='black')
-ax5.set_xlim(0,100)
-ax5.set_ylim(0,100)
-ax5.set_title('Trees fractional cover', fontsize=32)
-ax5.set_xlabel('Observed', fontsize=24); ax5.set_ylabel('Predicted', fontsize=24)
-ax5.set_facecolor('white')
-plt.colorbar(plt5, ax=ax5)
-
-
-#%%
-# 3) Run S1 models, bias correction, and post-processing on training images and assess 
-#    against an the sample sample of pixels
-
-# Read in the S1 models
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/water_rfr_s1.pickle", "rb") as f:
-    water_regressor = pickle.load(f)
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/barren_rfr_s1.pickle", "rb") as f:
-    barren_regressor = pickle.load(f)
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/herb_rfr_s1.pickle", "rb") as f:
-    herb_regressor = pickle.load(f)
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/shrub_rfr_s1.pickle", "rb") as f:
-    shrub_regressor = pickle.load(f)
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/trees_rfr_s1.pickle", "rb") as f:
-    trees_regressor = pickle.load(f)
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/water_bias_s1.pickle", "rb") as f:
-    reg0 = pickle.load(f)
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/barren_bias_s1.pickle", "rb") as f:
-    reg1 = pickle.load(f)
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/herb_bias_s1.pickle", "rb") as f:
-    reg2 = pickle.load(f)
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/shrub_bias_s1.pickle", "rb") as f:
-    reg3 = pickle.load(f)
-with open("/projectnb/modislc/users/seamorez/HLS_FCover/model_training/trees_bias_s1.pickle", "rb") as f:
-    reg4 = pickle.load(f)
-
-# Predict FCover on training images
-for i, row in train_key.iterrows():
-    # Read the 30 m map
-    with rio.open(traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name']) as src:        
-        # Read the feats and clip to map
-        with rio.open(outdir+str(row['year'])+'/'+row['above_tile']+'/feats_full_s1_'+str(row['year'])+'.tif') as featsrc:   
-            window = rio.windows.from_bounds(*src.bounds, transform=featsrc.transform)
-            full_stack_img = featsrc.read(window=window, boundless=True)
-            full_stack_img = full_stack_img.astype('float32'); full_stack_img[full_stack_img==32767] = np.nan
-
-    #meta = full_stack.meta
-    nsamples, nx, ny = full_stack_img.shape 
-    full_stack_img_2d = full_stack_img.reshape((nsamples,nx*ny))
-    full_stack_img_2d = full_stack_img_2d.T
-    
-    # Water fractional classification and display
-    water_predict = water_regressor.predict(full_stack_img_2d)
-    # Barren fractional classification and display
-    barren_predict = barren_regressor.predict(full_stack_img_2d)
-    # Herb fractional classification and display
-    herb_predict = herb_regressor.predict(full_stack_img_2d)
-    # Shrub fractional classification and display
-    shrub_predict = shrub_regressor.predict(full_stack_img_2d)
-    # Trees fractional classification and display
-    trees_predict = trees_regressor.predict(full_stack_img_2d)
-    
-    # Do bias correction
-    water_corrected = water_predict - reg0.predict(water_predict.reshape(-1,1))
-    barren_corrected = barren_predict - reg1.predict(barren_predict.reshape(-1,1))
-    herb_corrected = herb_predict - reg2.predict(herb_predict.reshape(-1,1))
-    shrub_corrected = shrub_predict - reg3.predict(shrub_predict.reshape(-1,1))
-    trees_corrected = trees_predict - reg4.predict(trees_predict.reshape(-1,1))
-    
-    # Correct negative values to 0% cover
-    water_corrected[water_corrected<0]=0
-    barren_corrected[barren_corrected<0]=0
-    herb_corrected[herb_corrected<0]=0
-    shrub_corrected[shrub_corrected<0]=0
-    trees_corrected[trees_corrected<0]=0
-    
-    # Remove water fraction if fractions from other modeled cover is already >95%
-    nonwater = np.vstack((barren_corrected,herb_corrected,shrub_corrected,trees_corrected))
-    totals_nonwater = nonwater.sum(axis=0)
-    water_corrected[totals_nonwater>=0.95] = 0
-    # Remove tree fraction if fractions from other modeled cover is already >95%
-    nontree = np.vstack((water_corrected,barren_corrected,herb_corrected,shrub_corrected))
-    totals_nontree = nontree.sum(axis=0)
-    trees_corrected[totals_nontree>=0.95] = 0
-    
-    # Water and Barren post-processing step: >= 90% cover post-correction becomes 100% and 0% for all other cover types
-    water_corrected[water_corrected>=0.95] = 1
-    barren_corrected[water_corrected>=0.95] = 0
-    herb_corrected[water_corrected>=0.95] = 0
-    shrub_corrected[water_corrected>=0.95] = 0
-    trees_corrected[water_corrected>=0.95] = 0
-    barren_corrected[barren_corrected>=0.95] = 1
-    water_corrected[barren_corrected>=0.95] = 0
-    herb_corrected[barren_corrected>=0.95] = 0
-    shrub_corrected[barren_corrected>=0.95] = 0
-    trees_corrected[barren_corrected>=0.95] = 0
-    
-    # Trees post-processing step: remove fractional trees <= 2% cover (low values lead to inaccuracies since so sparse)
-    trees_corrected[trees_corrected<=0.02] = 0
-
-    # Normalize and fix errors
-    # First step to normalize results: joining the fractional cover
-    all_corrected = np.vstack((water_corrected,barren_corrected,herb_corrected,shrub_corrected,trees_corrected))
-    # Sums, which need to be normalized to 1
-    totals_corrected = all_corrected.sum(axis=0)
-    # Normalized fractional cover for each class
-    all_norm = all_corrected/totals_corrected
-
-    # Separating back out to classes after normalization
-    water_norm_f = all_norm[0].reshape(1, nx*ny)
-    barren_norm_f = all_norm[1].reshape(1, nx*ny)
-    herb_norm_f = all_norm[2].reshape(1, nx*ny)
-    shrub_norm_f = all_norm[3].reshape(1, nx*ny)
-    trees_norm_f = all_norm[4].reshape(1, nx*ny)
-
-    # Removing no-data values and scaling (SOME MAY SUM TO >100 THIS WAY)
-    water_normf = water_norm_f*100
-    barren_normf = barren_norm_f*100
-    herb_normf = herb_norm_f*100
-    shrub_normf = shrub_norm_f*100
-    trees_normf = trees_norm_f*100
-    water_norm = np.around(water_normf)
-    barren_norm = np.around(barren_normf)
-    herb_norm = np.around(herb_normf)
-    shrub_norm = np.around(shrub_normf)
-    trees_norm = np.around(trees_normf)
-    
-    # Fix normalization errors
-    all_normf = np.concatenate([water_normf,barren_normf,herb_normf,shrub_normf,trees_normf], axis=0)
-    all_norm = np.concatenate([water_norm,barren_norm,herb_norm,shrub_norm,trees_norm], axis=0)
-    totals_norm = all_norm.sum(axis=0)
-    totals_norm = totals_norm.reshape(1, nx*ny)
-    incorrect_sums = totals_norm[totals_norm!=100]
-    
-    # 99% case
-    adj_i = np.argwhere(totals_norm<100)[:,1]
-    adj_mask = np.zeros((5,nx*ny), dtype=int)
-    adj_mask[:, adj_i] = 1
-    difs = all_norm - all_normf
-    mins_i = np.argwhere(difs == np.min(difs, axis=0))
-    mins_mask = np.zeros((5,nx*ny), dtype=int)
-    mins_mask[mins_i[:,0], mins_i[:,1]] = 1
-    all_norm[(adj_mask==1) & (mins_mask==1)] += 1
-    totals_norm = all_norm.sum(axis=0).reshape(1, nx*ny)
-    print(np.unique(totals_norm[totals_norm!=100]))
-    # 98% case
-    adj_i = np.argwhere(totals_norm<100)[:,1]
-    adj_mask = np.zeros((5,nx*ny), dtype=int)
-    adj_mask[:, adj_i] = 1
-    difs[mins_i[:,0],mins_i[:,1]] = 200
-    mins_i = np.argwhere(difs == np.min(difs, axis=0))
-    mins_mask = np.zeros((5,nx*ny), dtype=int)
-    mins_mask[mins_i[:,0], mins_i[:,1]] = 1
-    all_norm[(adj_mask==1) & (mins_mask==1)] += 1
-    totals_norm = all_norm.sum(axis=0).reshape(1, nx*ny)
-    print(np.unique(totals_norm[totals_norm!=100]))
-    # 101% case
-    adj_i = np.argwhere(totals_norm>100)[:,1]
-    adj_mask = np.zeros((5,nx*ny), dtype=int)
-    adj_mask[:, adj_i] = 1
-    difs = all_norm - all_normf
-    maxs_i = np.argwhere(difs == np.max(difs, axis=0))
-    maxs_mask = np.zeros((5,nx*ny), dtype=int)
-    maxs_mask[maxs_i[:,0], maxs_i[:,1]] = 1
-    all_norm[(adj_mask==1) & (maxs_mask==1)] -= 1
-    totals_norm = all_norm.sum(axis=0).reshape(1, nx*ny)
-    print(np.unique(totals_norm[totals_norm!=100]))
-    # 102% case
-    adj_i = np.argwhere(totals_norm>100)[:,1]
-    adj_mask = np.zeros((5,nx*ny), dtype=int)
-    adj_mask[:, adj_i] = 1
-    difs[maxs_i[:,0],maxs_i[:,1]] = -200
-    maxs_i = np.argwhere(difs == np.max(difs, axis=0))
-    maxs_mask = np.zeros((5,nx*ny), dtype=int)
-    maxs_mask[maxs_i[:,0], maxs_i[:,1]] = 1
-    all_norm[(adj_mask==1) & (maxs_mask==1)] -= 1
-    totals_norm = all_norm.sum(axis=0).reshape(1, nx*ny)
-    print(np.unique(totals_norm[totals_norm!=100]))
-    
-    print('Fixed normalizations')
-    
-    # Get assessment sample
-    print(row['train_img_name'])
-    assess_pts, assess_pred = get_assess(traindir+row['ecoreg_code']+'/training_imgs/'+row['train_img_name'],
-                                         all_norm.reshape(5,nx,ny),
-                                         all_used_pixels[i])
-    
-    if i==0:
-        all_assess_pts = assess_pts
-        all_assess_pred = assess_pred
-    else:
-        all_assess_pts = np.hstack((all_assess_pts, assess_pts))
-        all_assess_pred = np.hstack((all_assess_pred, assess_pred))
+        all_used_pixels.append(all_pixels)
     
     temp_assess_pts = np.delete(all_assess_pts, np.where((all_assess_pts==32767).any(axis=0))[0], axis=1)
     temp_assess_pred = np.delete(all_assess_pred, np.where((all_assess_pts==32767).any(axis=0))[0], axis=1)

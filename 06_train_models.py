@@ -1,3 +1,4 @@
+import sys
 import glob
 import numpy as np
 import pandas as pd
@@ -12,6 +13,11 @@ import pickle
 import matplotlib.pyplot as plt
 import seaborn as sb
 
+idx = ''
+#%%
+# Only run from command line!
+idx = sys.argv[1]  # ID of the model
+idx = '_'+str(idx)
 
 #%%
 #### PARAMETERS TO BE PASSED IN ####
@@ -24,7 +30,7 @@ start_yr = 2016
 end_yr = 2023
 phenometrics = ['50PCGI','Peak','50PCGD']
 metrics = ['dem', 'water', 'slope', 'aspect']
-do_s1 = True  # Bool for testing S1
+do_s1 = False  # Bool for testing S1
 
 #### PARAMETERS ####
 years = np.arange(start_yr, end_yr+1, 1)
@@ -239,11 +245,11 @@ for i, row in train_key.iterrows():
 #final_feat_pts = final_feat_pts[:-4,:,:]
 
 # Train models
-water_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[0])
-barren_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[1])
-herb_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[2])
-shrub_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[3])
-trees_regressor = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, random_state=7).fit(final_feat_pts.T, final_train_pts[4])
+water_regressor = RandomForestRegressor(n_estimators=1000, min_samples_leaf=4, random_state=7).fit(final_feat_pts.T, final_train_pts[0])
+barren_regressor = RandomForestRegressor(n_estimators=1000, min_samples_leaf=4, random_state=7).fit(final_feat_pts.T, final_train_pts[1])
+herb_regressor = RandomForestRegressor(n_estimators=1000, min_samples_leaf=8, random_state=7).fit(final_feat_pts.T, final_train_pts[2])
+shrub_regressor = RandomForestRegressor(n_estimators=1000, min_samples_leaf=8, random_state=7).fit(final_feat_pts.T, final_train_pts[3])
+trees_regressor = RandomForestRegressor(n_estimators=1000, min_samples_leaf=4, random_state=7).fit(final_feat_pts.T, final_train_pts[4])
 
 # Variable importances
 band_names = np.array(['50PCGI B','50PCGI G','50PCGI R','50PCGI NIR','50PCGI SWIR1','50PCGI SWIR2','50PCGI EVI2','50PCGI TCG','50PCGI TCW','50PCGI TCB',
@@ -271,17 +277,17 @@ plt.show()
 
 # Save models
 if do_s1==True:
-    water_path = model_traindir+"water_rfr_s1.pickle"
-    barren_path = model_traindir+"barren_rfr_s1.pickle"
-    herb_path = model_traindir+"herb_rfr_s1.pickle"
-    shrub_path = model_traindir+"shrub_rfr_s1.pickle"
-    trees_path = model_traindir+"trees_rfr_s1.pickle"
+    water_path = model_traindir+"water_rfr_s1"+idx+".pickle"
+    barren_path = model_traindir+"barren_rfr_s1"+idx+".pickle"
+    herb_path = model_traindir+"herb_rfr_s1"+idx+".pickle"
+    shrub_path = model_traindir+"shrub_rfr_s1"+idx+".pickle"
+    trees_path = model_traindir+"trees_rfr_s1"+idx+".pickle"
 else:
-    water_path = model_traindir+"water_rfr.pickle"
-    barren_path = model_traindir+"barren_rfr.pickle"
-    herb_path = model_traindir+"herb_rfr.pickle"
-    shrub_path = model_traindir+"shrub_rfr.pickle"
-    trees_path = model_traindir+"trees_rfr.pickle"
+    water_path = model_traindir+"water_rfr"+idx+".pickle"
+    barren_path = model_traindir+"barren_rfr"+idx+".pickle"
+    herb_path = model_traindir+"herb_rfr"+idx+".pickle"
+    shrub_path = model_traindir+"shrub_rfr"+idx+".pickle"
+    trees_path = model_traindir+"trees_rfr"+idx+".pickle"
     
 pickle.dump(water_regressor, open(water_path, "wb"))
 pickle.dump(barren_regressor, open(barren_path, "wb"))
@@ -291,7 +297,7 @@ pickle.dump(trees_regressor, open(trees_path, "wb"))
 
 # Save sampled training pixels
 for i, row in train_key.iterrows():
-    np.savetxt(model_traindir+row['train_img_name'][:-4]+'_ids_prebias.txt', all_train_pixels[i], delimiter=',')
+    np.savetxt(model_traindir+row['train_img_name'][:-4]+'_ids_prebias'+idx+'.txt', all_train_pixels[i], delimiter=',')
 
 
 #%%
@@ -476,21 +482,21 @@ plt.colorbar(plt5, ax=ax5)
 
 # Save bias correction models
 if do_s1==True:
-    pickle.dump(reg0, open(model_traindir+'water_bias_s1.pickle', "wb"))
-    pickle.dump(reg1, open(model_traindir+'barren_bias_s1.pickle', "wb"))
-    pickle.dump(reg2, open(model_traindir+'herb_bias_s1.pickle', "wb"))
-    pickle.dump(reg3, open(model_traindir+'shrub_bias_s1.pickle', "wb"))
-    pickle.dump(reg4, open(model_traindir+'trees_bias_s1.pickle', "wb"))
+    pickle.dump(reg0, open(model_traindir+'water_bias_s1'+idx+'.pickle', "wb"))
+    pickle.dump(reg1, open(model_traindir+'barren_bias_s1'+idx+'.pickle', "wb"))
+    pickle.dump(reg2, open(model_traindir+'herb_bias_s1'+idx+'.pickle', "wb"))
+    pickle.dump(reg3, open(model_traindir+'shrub_bias_s1'+idx+'.pickle', "wb"))
+    pickle.dump(reg4, open(model_traindir+'trees_bias_s1'+idx+'.pickle', "wb"))
 else:
-    pickle.dump(reg0, open(model_traindir+'water_bias.pickle', "wb"))
-    pickle.dump(reg1, open(model_traindir+'barren_bias.pickle', "wb"))
-    pickle.dump(reg2, open(model_traindir+'herb_bias.pickle', "wb"))
-    pickle.dump(reg3, open(model_traindir+'shrub_bias.pickle', "wb"))
-    pickle.dump(reg4, open(model_traindir+'trees_bias.pickle', "wb"))
+    pickle.dump(reg0, open(model_traindir+'water_bias'+idx+'.pickle', "wb"))
+    pickle.dump(reg1, open(model_traindir+'barren_bias'+idx+'.pickle', "wb"))
+    pickle.dump(reg2, open(model_traindir+'herb_bias'+idx+'.pickle', "wb"))
+    pickle.dump(reg3, open(model_traindir+'shrub_bias'+idx+'pickle', "wb"))
+    pickle.dump(reg4, open(model_traindir+'trees_bias'+idx+'.pickle', "wb"))
 
 # Save sampled training pixels
 for i, row in train_key.iterrows():
-    np.savetxt(model_traindir+row['train_img_name'][:-4]+'_ids.txt', all_train_bias_pixels[i], delimiter=',')
+    np.savetxt(model_traindir+row['train_img_name'][:-4]+'_ids'+idx+'.txt', all_train_bias_pixels[i], delimiter=',')
 
 #%%
 # 3) Run models, bias correction, and post-processing on training images and assess 

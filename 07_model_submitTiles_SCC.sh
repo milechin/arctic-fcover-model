@@ -3,7 +3,7 @@
 module load jq
 
 parameters="/projectnb/modislc/users/seamorez/HLS_FCover/scripts/model_parameters.json"
-tileList="/projectnb/modislc/users/seamorez/HLS_FCover/scripts/ArcticFoothill_tiles.txt" 
+tileList="/projectnb/modislc/users/seamorez/HLS_FCover/scripts/add_tiles.txt" 
 #tileList="/projectnb/modislc/users/seamorez/HLS_FCover/scripts/add_tiles.txt"  #CHANGE AFTER TEST TO ABOVE LINE
 
 numCores=$( jq .SCC.numCores $parameters )

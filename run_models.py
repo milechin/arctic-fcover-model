@@ -10,6 +10,7 @@ start_time = time.time()
 
 tile = sys.argv[1]
 year = sys.argv[2]
+model = '_'+str(sys.argv[3]) if len(sys.argv) > 3 else ''
 
 #### PARAMETERS TO BE PASSED IN ####
 outdir = '/projectnb/modislc/users/seamorez/HLS_FCover/output/'
@@ -19,11 +20,11 @@ model_outdir = '/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/'
 ################################### STEP 1 ###################################
 # Prepare models and data
 # Read in models
-trees_regressor = pickle.load(open(model_traindir+"trees_rfr.pickle", "rb"))
-shrub_regressor = pickle.load(open(model_traindir+"shrub_rfr.pickle", "rb"))
-herb_regressor = pickle.load(open(model_traindir+"herb_rfr.pickle", "rb"))
-barren_regressor = pickle.load(open(model_traindir+"barren_rfr.pickle", "rb"))
-water_regressor = pickle.load(open(model_traindir+"water_rfr.pickle", "rb"))
+trees_regressor = pickle.load(open(model_traindir+"trees_rfr"+model+".pickle", "rb"))
+shrub_regressor = pickle.load(open(model_traindir+"shrub_rfr"+model+".pickle", "rb"))
+herb_regressor = pickle.load(open(model_traindir+"herb_rfr"+model+".pickle", "rb"))
+barren_regressor = pickle.load(open(model_traindir+"barren_rfr"+model+".pickle", "rb"))
+water_regressor = pickle.load(open(model_traindir+"water_rfr"+model+".pickle", "rb"))
 
 # Read in raster
 full_stack = rasterio.open(outdir+year+'/'+tile+'/feats_full_'+year+'.tif','r')
@@ -46,11 +47,11 @@ trees_predict = trees_regressor.predict(full_stack_img_2d)
 ################################### STEP 3 ###################################
 # Correct bias
 # Read in bias models 
-water_bias = pickle.load(open(model_traindir+"water_bias.pickle", "rb"))
-barren_bias = pickle.load(open(model_traindir+"barren_bias.pickle", "rb"))
-herb_bias = pickle.load(open(model_traindir+"herb_bias.pickle", "rb"))
-shrub_bias = pickle.load(open(model_traindir+"shrub_bias.pickle", "rb"))
-trees_bias = pickle.load(open(model_traindir+"trees_bias.pickle", "rb"))
+water_bias = pickle.load(open(model_traindir+"water_bias"+model+".pickle", "rb"))
+barren_bias = pickle.load(open(model_traindir+"barren_bias"+model+".pickle", "rb"))
+herb_bias = pickle.load(open(model_traindir+"herb_bias"+model+".pickle", "rb"))
+shrub_bias = pickle.load(open(model_traindir+"shrub_bias"+model+".pickle", "rb"))
+trees_bias = pickle.load(open(model_traindir+"trees_bias"+model+".pickle", "rb"))
 
 # Correct for each class
 water_corrected = water_predict.reshape(nx*ny) - water_bias.predict(water_predict.reshape(nx*ny,1))
