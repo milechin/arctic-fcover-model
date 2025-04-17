@@ -1,3 +1,4 @@
+#%%
 import sys
 import os
 import time
@@ -9,50 +10,82 @@ import xarray as xr
 import rioxarray
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
+import dask
+
 
 #%%
 start_time = time.time()
 
-tile = 'Bh07v01'#sys.argv[1]
-start_year = 2016#sys.argv[2]
-end_year = 2023#sys.argv[3]
+tile = 'Bh07v01'   #sys.argv[1]
+start_year = 2016  #sys.argv[2]
+end_year = 2023    #sys.argv[3]
 
 #### PARAMETERS TO BE PASSED IN ####
 nmodels=20
-chunk_size={'x':1000, 'y':1000}
 
-outdir = '/projectnb/modislc/users/seamorez/HLS_FCover/output/'
+# Have each band be its own chunk
+chunk_size={'band': 1, 'x':6000, 'y':6000}
+
+# Get TMPDIR and NSLOTS from environment variables
+TMPDIR = os.environ.get("TMPDIR")
+NSLOTS = int(os.environ.get("NSLOTS"))
+
+# Configure dask to run as threads and set number of workers based on NSLOT value.
+dask.config.set(scheduler='threads') 
+dask.config.set(num_workers=NSLOTS)
+
+# Set paths.  Output is set to TMPDIR of the job.
+outdir = f"{TMPDIR}/output/"
 model_traindir = '/projectnb/modislc/users/seamorez/HLS_FCover/model_training/MC_resampling/'
 model_outdir = '/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/MC_outputs/'
+
+
 
 #%%
 for year in range(int(start_year), int(end_year)+1):
     print(year)
-    # List to hold all the opened rasters
-    data_arrays = []
-    
-    for model in range(1,nmodels+1):
-        print('Stacking model '+str(model))
+
+
+    # Check if output directory exists, if not create it
+    if not os.path.isdir(f"{outdir}final/{year}"):
+        os.makedirs(f"{outdir}final/{year}")
+
+    # Check if the output file already exists
+    if os.path.exists(f"{outdir}final/{year}/FCover_{tile}_{year}_rfr_mean.tif"):
+       continue
+
+    # Assemble a list of paths
+    file_paths = []
+    for model in range(1, nmodels+1):
         path = f"{model_outdir}{year}/FCover_{tile}_{year}_rfr_{model}.tif"
-        da = rioxarray.open_rasterio(path, masked=True, chunks=chunk_size).squeeze()  # squeeze to remove band dim if present
-        data_arrays.append(da)
+        file_paths.append(path)
     
-    # Stack along a new dimension called 'model'
-    stacked = xr.concat(data_arrays, dim='model')
+    # Read in the raster data and stack them
+    stacked = xr.open_mfdataset(
+                                file_paths,
+                                concat_dim=[
+                                    pd.Index(
+                                        np.arange(len(file_paths)),
+                                        name="model"
+                                        ),
+                                    ],
+                                combine="nested",
+                                parallel=True,
+                                chunks=chunk_size)["band_data"]
     
     # Compute mean and standard error (SE) across models
-    mean = stacked.mean(dim='model').compute()
-    se = (stacked.std(dim='model') / np.sqrt(nmodels)).compute()
+    # Since this is a dask array, the calculation will not occur now, but will be 
+    # triggered automatically when rio.to_raster is called.
+    mean = stacked.mean(dim='model')
+    se = (stacked.std(dim='model') / np.sqrt(nmodels))
     
-    # Output maps
-    if not os.path.isdir(f"{model_outdir}final/{year}"):
-        os.makedirs(f"{model_outdir}final/{year}")
-    if os.path.exists(f"{model_outdir}final/{year}/FCover_{tile}_{year}_rfr_mean.tif"):
-        continue
-    
-    mean.rio.to_raster(f"{model_outdir}final/{year}/FCover_{tile}_{year}_rfr_mean.tif")
-    se.rio.to_raster(f"{model_outdir}final/{year}/FCover_{tile}_{year}_rfr_se.tif")
+    # Save the results. (This will trigger compute.)
+    mean.rio.to_raster(f"{outdir}final/{year}/FCover_{tile}_{year}_rfr_mean.tif", num_threads=str(NSLOTS))
+    se.rio.to_raster(f"{outdir}final/{year}/FCover_{tile}_{year}_rfr_se.tif", num_threads=str(NSLOTS))
 
+
+## TO DO
+# Copy over the results from TMPDIR to the project directory.
 
 #%%
 end_time = time.time()
