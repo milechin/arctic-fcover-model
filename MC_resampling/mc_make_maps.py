@@ -1,6 +1,7 @@
 #%%
 import sys
 import os
+import shutil
 import time
 import pickle
 import numpy as np
@@ -16,12 +17,15 @@ import dask
 #%%
 start_time = time.time()
 
-tile = 'Bh07v01'   #sys.argv[1]
-start_year = 2016  #sys.argv[2]
-end_year = 2023    #sys.argv[3]
+tile = sys.argv[1]
+start_year = sys.argv[2]
+end_year = sys.argv[3]
+#tile = 'Bh07v01'   #sys.argv[1]
+#start_year = 2016  #sys.argv[2]
+#end_year = 2023    #sys.argv[3]
 
 #### PARAMETERS TO BE PASSED IN ####
-nmodels=20
+nmodels = int(sys.argv[4])
 
 # Have each band be its own chunk
 chunk_size={'band': 1, 'x':6000, 'y':6000}
@@ -40,7 +44,6 @@ model_traindir = '/projectnb/modislc/users/seamorez/HLS_FCover/model_training/MC
 model_outdir = '/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/MC_outputs/'
 
 
-
 #%%
 for year in range(int(start_year), int(end_year)+1):
     print(year)
@@ -51,7 +54,7 @@ for year in range(int(start_year), int(end_year)+1):
         os.makedirs(f"{outdir}final/{year}")
 
     # Check if the output file already exists
-    if os.path.exists(f"{outdir}final/{year}/FCover_{tile}_{year}_rfr_mean.tif"):
+    if os.path.exists(f"{model_outdir}final/{year}/FCover_{tile}_{year}_rfr_mean.tif"):
        continue
 
     # Assemble a list of paths
@@ -85,7 +88,18 @@ for year in range(int(start_year), int(end_year)+1):
 
 
 ## TO DO
-# Copy over the results from TMPDIR to the project directory.
+#for year in range(int(start_year), int(end_year)+1):
+    # Define paths in TMPDIR
+    mean_tmp = f"{outdir}final/{year}/FCover_{tile}_{year}_rfr_mean.tif"
+    se_tmp = f"{outdir}final/{year}/FCover_{tile}_{year}_rfr_se.tif"
+    
+    # Define final output path (outside TMPDIR if outdir is just a placeholder for TMP)
+    final_dir = f"{model_outdir}final/{year}/"
+    os.makedirs(final_dir, exist_ok=True)
+    
+    # Copy files to final destination
+    shutil.copy(mean_tmp, os.path.join(final_dir, os.path.basename(mean_tmp)))
+    shutil.copy(se_tmp, os.path.join(final_dir, os.path.basename(se_tmp)))
 
 #%%
 end_time = time.time()
