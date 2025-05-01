@@ -1,34 +1,31 @@
 #%% This script outputs trend maps
 import numpy as np
-import pandas as pd
 import os
 import glob
 import xarray as xr
 import rioxarray
 import rasterio as rio
-from rasterio.mask import mask
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import colormaps as cmaps
-import seaborn as sb
 from dask.distributed import Client, LocalCluster
 from dask.diagnostics import ProgressBar
 import dask
 import pymannkendall as mk
-from scipy.stats import linregress
+
 
 
 #%% Functions
 def trend(data): 
+    
+    # Check if data is empty
+    if data.size == 0:
+        return -9999, -9999, -9999
+    
+    # Check if data only contains NaN values
     if np.all(np.isnan(data)):
-        return np.nan, np.nan, np.nan
-    else:
-        try:
-            reg = mk.original_test(data)
-            #print('.',end='',flush=True)
-            return reg.slope, reg.intercept, reg.p
-        except:
-            return np.nan, np.nan, np.nan
+        return -8888, -8888, -8888
+
+    reg = mk.original_test(data)
+    return reg.slope, reg.intercept, reg.p
+
     
 def calc_trend(tile, lc):
     #file_pattern = "/projectnb/modislc/users/seamorez/HLS_Pheno/clim_dat/ERA5_Land_T/2.2.1/AGDD_*.tif"
@@ -93,47 +90,51 @@ def calc_trend(tile, lc):
     return slope, intercept, pval, rast_0
     
 
-#%% Output trends for each LC class and the significance levels
-# Configure Dask LocalCluster to use NSLOTS threads
-NSLOTS = int(os.environ.get("NSLOTS"))
+def main():
+    #%% Output trends for each LC class and the significance levels
+    # Configure Dask LocalCluster to use NSLOTS threads
+    NSLOTS = int(os.environ.get("NSLOTS"))
 
-cluster = LocalCluster(
-    n_workers=1,               # 1 worker with multiple threads
-    threads_per_worker=NSLOTS, # Number of threads = NSLOTS
-    processes=False,           # Use threads, not separate processes
-    #dashboard_address=None     # Disable dashboard (optional on HPC)
-)
+    cluster = LocalCluster(
+        n_workers=1,               # 1 worker with multiple threads
+        threads_per_worker=NSLOTS, # Number of threads = NSLOTS
+        processes=False,           # Use threads, not separate processes
+        #dashboard_address=None     # Disable dashboard (optional on HPC)
+    )
 
-client = Client(cluster)
-print(client)
+    client = Client(cluster)
+    print(client)
 
-with open('/projectnb/modislc/users/seamorez/HLS_FCover/scripts/techmanuscript_tiles.txt', 'r') as f:
-    tiles = [line.strip() for line in f if line.strip()]
+    with open('/projectnb/modislc/users/seamorez/HLS_FCover/scripts/techmanuscript_tiles.txt', 'r') as f:
+        tiles = [line.strip() for line in f if line.strip()]
+        
+    for tile in tiles[1:2]:
+        if os.path.exists('/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/MC_outputs/final/trends/FCover_'+tile+'_shrub.tif'):
+            print('Trend already exists for '+tile)
+            continue
     
-for tile in tiles[1:2]:
-    if os.path.exists('/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/MC_outputs/final/trends/FCover_'+tile+'_shrub.tif'):
-        print('Trend already exists for '+tile)
-        continue
-   
-    print(tile)
-    slope, intercept, pval, rast_0 = calc_trend(tile, 4)
-    
-    # Export results
-    with rio.open(rast_0) as src:
-        meta = src.meta
-        transform1 = src.transform
-    
-    # Scale and Prepare output shape: [band, y, x]
-    slope_np = np.around(slope.values*1000)  # shape: [band, y, x]
-    intercept_np = np.around(intercept.values)
-    pval_np = np.around(pval.values*1000)    # shape: [band, y, x]
-    combined = np.concatenate([slope_np, intercept_np, pval_np], axis=0)  # shape: [3*bands, y, x]
-    print(combined.shape)
+        print(tile)
+        slope, intercept, pval, rast_0 = calc_trend(tile, 4)
+        
+        # Export results
+        with rio.open(rast_0) as src:
+            meta = src.meta
+            transform1 = src.transform
+        
+        # Scale and Prepare output shape: [band, y, x]
+        slope_np = np.around(slope.values*1000)  # shape: [band, y, x]
+        intercept_np = np.around(intercept.values)
+        pval_np = np.around(pval.values*1000)    # shape: [band, y, x]
+        combined = np.concatenate([slope_np, intercept_np, pval_np], axis=0)  # shape: [3*bands, y, x]
+        print(combined.shape)
 
-    # Update metadata
-    meta.update(count=3, transform=transform1, dtype='int16', nodata=32767)
-    
-    with rio.open('/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/MC_outputs/final/trends/FCover_'+tile+'_shrub.tif', 'w', **meta) as dst:
-        dst.write(combined)
+        # Update metadata
+        meta.update(count=3, transform=transform1, dtype='int16', nodata=32767)
+        
+        with rio.open('/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/MC_outputs/final/trends/FCover_'+tile+'_shrub.tif', 'w', **meta) as dst:
+            dst.write(combined)
+
+if __name__ == "__main__":
+    main()
 
 
