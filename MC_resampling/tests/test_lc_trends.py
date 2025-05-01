@@ -62,6 +62,18 @@ def test_trend_with_all_nan():
     assert intercept == -8888
     assert p == -8888
 
+def test_trend_with_one_value():
+    # Test the trend function with a single value
+    data = np.array([np.nan, 1, np.nan, np.nan])
+
+    # Call the trend function
+    slope, intercept, p = trend(data)
+
+    # Check the results
+    assert slope == -9999
+    assert intercept == -9999
+    assert p == -9999
+
 def test_trend_with_xarray():
     # Test the trend function with an xarray DataArray
     data = xr.DataArray(np.array([1, 2, 3, 4, 5]), dims='time')

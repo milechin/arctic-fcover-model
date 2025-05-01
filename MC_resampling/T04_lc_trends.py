@@ -5,8 +5,7 @@ import glob
 import xarray as xr
 import rioxarray
 import rasterio as rio
-from dask.distributed import Client, LocalCluster
-from dask.diagnostics import ProgressBar
+from dask.distributed import Client, LocalCluster, progress
 import dask
 import pymannkendall as mk
 
@@ -15,19 +14,25 @@ import pymannkendall as mk
 #%% Functions
 def trend(data):
 
-    # Check if data is empty
-    if data.size == 0:
+    # Check if data is empty or containsonly one non-NaN value
+    if data.size == 0 or data[~np.isnan(data)].size == 1:
         return -9999, -9999, -9999
 
     # Check if data only contains NaN values
     if np.all(np.isnan(data)):
         return -8888, -8888, -8888
 
-    reg = mk.original_test(data)
+    try:
+        reg = mk.original_test(data)
+    except ValueError as e:
+        print(f"Error in trend calculation: {e}")
+        return -7777, -7777, -7777
+    
     return reg.slope, reg.intercept, reg.p
 
 
 def calc_trend(tile, lc):
+
     # file_pattern = "/projectnb/modislc/users/seamorez/HLS_Pheno/clim_dat/ERA5_Land_T/2.2.1/AGDD_*.tif"
     file_pattern = "/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/MC_outputs/final/**/FCover_"+tile+"_*_rfr_mean.tif"
     raster_files = glob.glob(file_pattern)
@@ -48,7 +53,8 @@ def calc_trend(tile, lc):
 
         # Open the raster file as a dataset
         # ds = xr.open_dataset(file, engine="rasterio")
-        ds = rioxarray.open_rasterio(file, chunks={'x': 1000, 'y': 1000})
+        ds = rioxarray.open_rasterio(file, chunks={'x': 6000, 'y': 6000})
+
         ds = ds.isel(band=lc)
         ds = ds.where(ds != -9999)
         # Add a time dimension and coordinate to the dataset
@@ -59,28 +65,38 @@ def calc_trend(tile, lc):
     # Concatenate along the time dimension
     LC_ts = xr.concat(datasets, dim='time')
     LC_ts = LC_ts.chunk({'time': -1})
-    # Assign time coordinates
-    LC_ts = LC_ts.assign_coords(time=('time', time_coords))
-    # Transpose to [band, time, y, x]
-    # LC_ts = LC_ts.transpose('band', 'time', 'y', 'x')
     print(LC_ts)
     print(type(LC_ts.data))
 
+    # Drop the band coordinate as it is not needed.
+    # LC_ts = LC_ts.reset_coords("band", drop=True)
+
     # Apply the function using apply_ufunc
     # The function should return two arrays: slope and intercept
-    slope, intercept,pval = xr.apply_ufunc(
+    slope, intercept, pval = xr.apply_ufunc(
         trend,
         LC_ts,  # The data variable to apply the function to
         input_core_dims=[['time']],  # Specify that 'time' is the core dimension
-        # output_core_dims=[['slope']],  # The result will have the same spatial dimensions
         output_core_dims=[[], [], []],
-        vectorize=True,  # Vectorize the function to apply it over the spatial dimensions
-        dask='parallelized'
-        # dask='allowed'  # Allow dask for larger-than-memory computations (optional)
+        vectorize='True',  # Vectorize the function to apply it over the spatial dimensions
+        dask='parallelized',
+        output_dtypes=[np.float32, np.float32, np.float32],  # Specify the output data types
     )
 
-    # with ProgressBar():
-    #     slope, intercept, pval = dask.compute(slope, intercept, pval) #slope.compute(), pval.compute()
+    # When using LocalCluster, need to use the following lines to make progress bar to work
+    # source: https://docs.dask.org/en/stable/diagnostics-distributed.html#progress-bar
+    x = dask.persist(slope, intercept, pval)
+
+    # Get progress bar to appear
+    progress(x)
+
+    # Get the results
+    result = dask.compute(x)
+
+    # Parse the results
+    slope = result[0][0]
+    intercept = result[0][1]
+    pval = result[0][2]
 
     rast_0 = raster_files[0]
 
@@ -89,8 +105,9 @@ def calc_trend(tile, lc):
 
     return slope, intercept, pval, rast_0
 
-
-def main():
+# Local Cluster should be started within the __name__ == "__main__" block
+# https://stackoverflow.com/questions/55057957/an-attempt-has-been-made-to-start-a-new-process-before-the-current-process-has-f
+if __name__ == "__main__":
     # %% Output trends for each LC class and the significance levels
     # Configure Dask LocalCluster to use NSLOTS threads
     NSLOTS = int(os.environ.get("NSLOTS"))
@@ -134,5 +151,3 @@ def main():
         with rio.open('/projectnb/modislc/users/seamorez/HLS_FCover/model_outputs/MC_outputs/final/trends/FCover_'+tile+'_shrub.tif', 'w', **meta) as dst:
             dst.write(combined)
 
-if __name__ == "__main__":
-    main()
